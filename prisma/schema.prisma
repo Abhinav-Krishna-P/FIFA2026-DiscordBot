@@ -1,0 +1,87 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                      String              @id // Discord User ID
+  username                String
+  coins                   Int                 @default(0)
+  totalPollWins           Int                 @default(0)
+  totalQuizParticipation  Int                 @default(0)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  quizParticipations      QuizParticipation[]
+  predictions             Prediction[]
+  transactions            CoinTransaction[]
+  achievements            Achievement[]
+}
+
+model Quiz {
+  id             String              @id @default(uuid())
+  date           String              @unique // YYYY-MM-DD
+  questions      Json                // Array of 10 questions: { question, options[], correctAnswerIndex, explanation }
+  createdAt      DateTime            @default(now())
+  participations QuizParticipation[]
+}
+
+model QuizParticipation {
+  id           String   @id @default(uuid())
+  userId       String
+  quizId       String
+  score        Int
+  startedAt    DateTime
+  completedAt  DateTime
+  durationMs   Int
+  answers      Json     // Array of user's answer indices
+  user         User     @relation(fields: [userId], references: [id])
+  quiz         Quiz     @relation(fields: [quizId], references: [id])
+
+  @@unique([userId, quizId])
+}
+
+model MatchPredictionPoll {
+  id          String       @id // Discord Message ID (acts as the poll ID)
+  matchId     String       // ID from Football API
+  homeTeam    String
+  awayTeam    String
+  kickoffTime DateTime
+  status      String       @default("active") // active, settled, cancelled
+  winner      String?      // HOME, AWAY, DRAW, or null
+  channelId   String
+  predictions Prediction[]
+}
+
+model Prediction {
+  id              String              @id @default(uuid())
+  pollId          String
+  userId          String
+  predictedWinner String              // HOME, AWAY, DRAW
+  createdAt       DateTime            @default(now())
+  poll            MatchPredictionPoll @relation(fields: [pollId], references: [id])
+  user            User                @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, userId])
+}
+
+model CoinTransaction {
+  id        String   @id @default(uuid())
+  userId    String
+  amount    Int
+  reason    String   // quiz_participation, quiz_daily_1st, quiz_daily_2nd, quiz_daily_3rd, prediction_win, admin_adjust
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  description String
+  unlockedAt  DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
