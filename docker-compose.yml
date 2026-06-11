@@ -7,5 +7,10 @@ services:
     restart: always
     env_file:
       - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - evolution-network
+
+networks:
+  evolution-network:
+    external: true
+    name: evolution-network
