@@ -1,6 +1,4 @@
-<div align="center">
-  <img src="assets/banner.jpeg" alt="FIFA 2026 Discord Bot Banner" width="100%">
-  
+<div align="center">  
   # 🏆 FIFA World Cup 2026 Discord Bot 🏆
 
   [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
