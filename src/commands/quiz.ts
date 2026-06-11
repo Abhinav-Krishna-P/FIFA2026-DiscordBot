@@ -33,6 +33,15 @@ export async function handleQuizStart(interaction: ChatInputCommandInteraction |
   const userId = interaction.user.id;
   const todayStr = getISTDateString(0);
 
+  // Check if the current time is 6:00 PM IST or later
+  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  if (nowIST.getHours() >= 18) {
+    await interaction.editReply({
+      content: "⚽ Quiz  is scheduled  for  2:30pm everyday!"
+    });
+    return;
+  }
+
   // 1. Check if user has an active session
   if (activeQuizSessions.has(userId)) {
     await interaction.editReply({

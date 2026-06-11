@@ -1,7 +1,8 @@
 import { 
   SlashCommandBuilder, 
   ChatInputCommandInteraction, 
-  Client 
+  Client,
+  PermissionFlagsBits
 } from 'discord.js';
 import { SchedulerService } from '../../services/scheduler';
 import { Command } from '../index';
@@ -9,7 +10,8 @@ import { Command } from '../index';
 export const settlePollsCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('settle-polls')
-    .setDescription("Admin: Force prediction poll settlement and reward distribution for yesterday's matches"),
+    .setDescription("Admin: Force prediction poll settlement and reward distribution for yesterday's matches")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction, client: Client): Promise<void> {
     // Check for administrator permission

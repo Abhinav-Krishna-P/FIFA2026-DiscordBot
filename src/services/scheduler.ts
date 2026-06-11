@@ -19,8 +19,8 @@ export class SchedulerService {
   public start(): void {
     console.log('Initializing scheduler jobs...');
 
-    // 1. Generate daily quiz at 10:20 AM IST
-    cron.schedule('17 11 * * *', async () => {
+    // 1. Generate daily quiz at 2:30 AM IST
+    cron.schedule('30 14 * * *', async () => {
       console.log('[Scheduler] Running Daily Quiz Generation job...');
       try {
         await this.generateQuizJob();
@@ -31,8 +31,8 @@ export class SchedulerService {
       timezone: 'Asia/Kolkata'
     });
 
-    // 2. Generate today's match prediction polls at 10:25 AM IST
-    cron.schedule('52 11 * * *', async () => {
+    // 2. Generate today's match prediction polls at 11:00 AM IST
+    cron.schedule('00 11 * * *', async () => {
       console.log('[Scheduler] Running Match Prediction Polls Generation job...');
       try {
         await this.generatePollsJob();
@@ -43,8 +43,8 @@ export class SchedulerService {
       timezone: 'Asia/Kolkata'
     });
 
-    // 3. Settle yesterday's polls and distribute rewards at 8:00 AM IST
-    cron.schedule('0 8 * * *', async () => {
+    // 3. Settle yesterday's polls and distribute rewards at 10:00 AM IST
+    cron.schedule('0 10 * * *', async () => {
       console.log('[Scheduler] Running Polls Settlement job...');
       try {
         await this.settlePollsJob();
@@ -55,8 +55,8 @@ export class SchedulerService {
       timezone: 'Asia/Kolkata'
     });
 
-    // 4. Calculate daily quiz winners and distribute rewards at 11:59 PM IST
-    cron.schedule('59 23 * * *', async () => {
+    // 4. Calculate daily quiz winners and distribute rewards at 6:00 PM IST
+    cron.schedule('0 18 * * *', async () => {
       console.log('[Scheduler] Running Daily Quiz Winners Calculation job...');
       try {
         await this.calculateQuizWinnersJob();
@@ -424,20 +424,31 @@ export class SchedulerService {
         }
       });
 
-      const medals = ['🥇', '🥈', '🥉'];
-      podiumLines.push(`${medals[i]} **${reward.place} Place**: <@${part.userId}> - **${part.score}/10** correct in **${timeInSec}s** (+${reward.coins} Coins)`);
     }
 
-    // Build embed
-    const embed = new EmbedBuilder()
-      .setTitle(`🏆 Daily Quiz Podium - ${todayStr} 🏆`)
-      .setDescription(podiumLines.join('\n'))
-      .setColor(0xf59e0b)
-      .setFooter({ text: `Total participants today: ${participations.length}` });
+    // Build plain-text announcement with large headers for 1st and 2nd places
+    const winner1 = participations[0];
+    const time1 = (winner1.durationMs / 1000).toFixed(1);
+    
+    let announcement = `🎉✨ **DAILY QUIZ CHAMPIONS** ✨🎉\n\n`;
+    announcement += `# 🥇 1st Place: <@${winner1.userId}>\n`;
+    announcement += `*   **Quiz Mark:** \`${winner1.score}/10\`\n`;
+    announcement += `*   **Time:** \`${time1}s\`\n`;
+    announcement += `*   **Points Earned:** \`+20 F26 Coins\`\n\n`;
+
+    if (participations.length > 1) {
+      const winner2 = participations[1];
+      const time2 = (winner2.durationMs / 1000).toFixed(1);
+      announcement += `## 🥈 2nd Place: <@${winner2.userId}>\n`;
+      announcement += `*   **Quiz Mark:** \`${winner2.score}/10\`\n`;
+      announcement += `*   **Time:** \`${time2}s\`\n`;
+      announcement += `*   **Points Earned:** \`+10 F26 Coins\`\n\n`;
+    }
+
+    announcement += `*Congratulations to today's champions! (Total participants: ${participations.length})*`;
 
     await channel.send({
-      content: `🎉 Congratulations to today's quiz champions!`,
-      embeds: [embed]
+      content: announcement
     });
 
     console.log('[Quiz Winners] Successfully distributed daily quiz podium rewards.');

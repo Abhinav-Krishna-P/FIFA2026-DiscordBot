@@ -1,7 +1,8 @@
 import { 
   SlashCommandBuilder, 
   ChatInputCommandInteraction, 
-  Client 
+  Client,
+  PermissionFlagsBits
 } from 'discord.js';
 import { SchedulerService } from '../../services/scheduler';
 import { Command } from '../index';
@@ -9,7 +10,8 @@ import { Command } from '../index';
 export const forceQuizCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('force-generate-quiz')
-    .setDescription("Admin: Force generation of today's quiz from yesterday's match statistics"),
+    .setDescription("Admin: Force generation of today's quiz from yesterday's match statistics")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction, client: Client): Promise<void> {
     // Check for administrator permission

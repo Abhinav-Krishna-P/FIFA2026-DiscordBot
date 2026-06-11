@@ -2,7 +2,8 @@ import {
   SlashCommandBuilder, 
   ChatInputCommandInteraction, 
   Client, 
-  EmbedBuilder 
+  EmbedBuilder,
+  PermissionFlagsBits
 } from 'discord.js';
 import { prisma } from '../../services/db';
 import { Command } from '../index';
@@ -11,6 +12,7 @@ export const adjustCoinsCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('adjust-coins')
     .setDescription("Admin: Add or remove FIFA W Coins from a user's balance")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption(option => 
       option
         .setName('user')

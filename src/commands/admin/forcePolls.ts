@@ -1,7 +1,8 @@
 import { 
   SlashCommandBuilder, 
   ChatInputCommandInteraction, 
-  Client 
+  Client,
+  PermissionFlagsBits
 } from 'discord.js';
 import { SchedulerService } from '../../services/scheduler';
 import { Command } from '../index';
@@ -9,7 +10,8 @@ import { Command } from '../index';
 export const forcePollsCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('force-generate-polls')
-    .setDescription("Admin: Force generation of today's match prediction polls on Discord"),
+    .setDescription("Admin: Force generation of today's match prediction polls on Discord")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction: ChatInputCommandInteraction, client: Client): Promise<void> {
     // Check for administrator permission

@@ -1,8 +1,8 @@
-import {
-  SlashCommandBuilder,
-  ChatInputCommandInteraction,
-  Client,
-  EmbedBuilder
+import { 
+  SlashCommandBuilder, 
+  ChatInputCommandInteraction, 
+  Client, 
+  EmbedBuilder 
 } from 'discord.js';
 import { prisma } from '../services/db';
 import { getISTDateString } from '../utils/date';
@@ -15,22 +15,27 @@ export const leaderboardCommand: Command = {
     .addSubcommand(sub =>
       sub
         .setName('daily')
-        .setDescription("Show today's daily quiz leaderboard")
+        .setDescription("Show today's daily F26 Coins leaderboard")
     )
     .addSubcommand(sub =>
       sub
         .setName('weekly')
-        .setDescription('Show the weekly accumulated quiz leaderboard')
+        .setDescription('Show the weekly accumulated F26 Coins leaderboard')
     )
     .addSubcommand(sub =>
       sub
         .setName('monthly')
-        .setDescription('Show the monthly accumulated quiz leaderboard')
+        .setDescription('Show the monthly accumulated F26 Coins leaderboard')
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('overall')
+        .setDescription('Show the overall all-time F26 Coins leaderboard')
     )
     .addSubcommand(sub =>
       sub
         .setName('coins')
-        .setDescription('Show the global FIFA W Coins leaderboard')
+        .setDescription('Show the global F26 Coins leaderboard')
     ),
 
   async execute(interaction: ChatInputCommandInteraction, client: Client): Promise<void> {
@@ -43,6 +48,8 @@ export const leaderboardCommand: Command = {
         await handleWeeklyLeaderboard(interaction);
       } else if (subcommand === 'monthly') {
         await handleMonthlyLeaderboard(interaction);
+      } else if (subcommand === 'overall') {
+        await handleOverallLeaderboard(interaction);
       } else if (subcommand === 'coins') {
         await handleCoinsLeaderboard(interaction);
       }
@@ -55,165 +62,181 @@ export const leaderboardCommand: Command = {
   }
 };
 
+/**
+ * Calculates start of a specific date at 12:00 AM in the Asia/Kolkata timezone.
+ */
+function getISTMidnight(dateOffset = 0): Date {
+  const now = new Date();
+  const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  if (dateOffset !== 0) {
+    istTime.setDate(istTime.getDate() + dateOffset);
+  }
+  istTime.setHours(0, 0, 0, 0);
+  const diff = now.getTime() - new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getTime();
+  return new Date(istTime.getTime() + diff);
+}
+
 async function handleDailyLeaderboard(interaction: ChatInputCommandInteraction) {
   const todayStr = getISTDateString(0);
+  const startOfToday = getISTMidnight(0);
 
-  // Find today's quiz
-  const quiz = await prisma.quiz.findUnique({
-    where: { date: todayStr }
+  // Group transactions by user for today
+  const transactions = await prisma.coinTransaction.groupBy({
+    by: ['userId'],
+    _sum: { amount: true },
+    where: {
+      createdAt: { gte: startOfToday },
+      amount: { gt: 0 } // Only positive coin gains
+    },
+    orderBy: {
+      _sum: { amount: 'desc' }
+    },
+    take: 10
   });
 
-  if (!quiz) {
+  if (transactions.length === 0) {
     await interaction.editReply({
-      content: `⚽ No quiz has been played today (${todayStr}) yet. Try taking the quiz with \`/quiz\` once it is live!`
+      content: `📊 **Daily F26 Coins Leaderboard - ${todayStr}**\nNo coins have been earned today yet. Play the quiz or submit prediction polls to rank first!`
     });
     return;
   }
 
-  // Fetch top 10 participations
-  const participations = await prisma.quizParticipation.findMany({
-    where: { quizId: quiz.id },
-    orderBy: [
-      { score: 'desc' },
-      { durationMs: 'asc' }
-    ],
-    take: 10,
-    include: { user: true }
+  // Fetch usernames
+  const userIds = transactions.map((t) => t.userId);
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } }
   });
-
-  if (participations.length === 0) {
-    await interaction.editReply({
-      content: `📊 **Daily Quiz Leaderboard - ${todayStr}**\nNo users have participated in today's quiz yet. Be the first by running \`/quiz\`!`
-    });
-    return;
-  }
 
   const embed = new EmbedBuilder()
-    .setTitle(`🏆 Daily Quiz Leaderboard - ${todayStr}`)
-    .setDescription('Ranked by highest score, then fastest completion time.')
+    .setTitle(`🏆 Daily F26 Coins Leaderboard - ${todayStr}`)
+    .setDescription('Ranks players by total F26 Coins earned today (quiz participation, podiums, and correct predictions).')
     .setColor(0xf59e0b)
     .setTimestamp();
 
-  const lines = participations.map((part, index) => {
-    const timeInSec = (part.durationMs / 1000).toFixed(1);
+  const lines = transactions.map((t, index) => {
+    const user = users.find((u) => u.id === t.userId);
+    const totalCoins = t._sum.amount || 0;
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `\`#${index + 1}\``;
-    return `${medal} <@${part.userId}> - **${part.score}/10** in **${timeInSec}s**`;
+    return `${medal} <@${t.userId}> - **${totalCoins}** F26 Coins`;
   });
 
-  embed.addFields({ name: 'Top Participants', value: lines.join('\n') });
+  embed.addFields({ name: 'Top Earners Today', value: lines.join('\n') });
 
   await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleWeeklyLeaderboard(interaction: ChatInputCommandInteraction) {
-  // Calculate start of current week (Monday 00:00:00 IST)
+  // Calculate start of current week (Monday 12:00 AM IST)
   const now = new Date();
-  const startOfWeek = new Date(now);
-  const day = startOfWeek.getDay();
-  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-  startOfWeek.setDate(diff);
-  startOfWeek.setHours(0, 0, 0, 0);
+  const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const day = istTime.getDay();
+  const diffDays = istTime.getDate() - day + (day === 0 ? -6 : 1);
+  istTime.setDate(diffDays);
+  istTime.setHours(0, 0, 0, 0);
+  const diff = now.getTime() - new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getTime();
+  const startOfWeek = new Date(istTime.getTime() + diff);
 
-  // Group quiz participations by user in the current week
-  const participations = await prisma.quizParticipation.groupBy({
+  // Group transactions by user for this week
+  const transactions = await prisma.coinTransaction.groupBy({
     by: ['userId'],
-    _sum: { score: true },
-    _count: { id: true },
+    _sum: { amount: true },
     where: {
-      startedAt: { gte: startOfWeek }
+      createdAt: { gte: startOfWeek },
+      amount: { gt: 0 }
     },
     orderBy: {
-      _sum: { score: 'desc' }
+      _sum: { amount: 'desc' }
     },
     take: 10
   });
 
-  if (participations.length === 0) {
+  if (transactions.length === 0) {
     await interaction.editReply({
-      content: '📊 **Weekly Quiz Leaderboard**\nNo quiz scores logged for this week yet!'
+      content: '📊 **Weekly F26 Coins Leaderboard**\nNo coins logged for this week yet!'
     });
     return;
   }
 
   // Fetch usernames
-  const userIds = participations.map((p) => p.userId);
+  const userIds = transactions.map((t) => t.userId);
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } }
   });
 
   const embed = new EmbedBuilder()
-    .setTitle('📅 Weekly Accumulated Quiz Leaderboard')
-    .setDescription(`Cumulative quiz scores since Monday, ${startOfWeek.toLocaleDateString('en-IN')}`)
+    .setTitle('📅 Weekly Accumulated F26 Coins Leaderboard')
+    .setDescription(`Cumulative F26 Coins earned since Monday, ${startOfWeek.toLocaleDateString('en-IN')}`)
     .setColor(0x10b981)
     .setTimestamp();
 
-  const lines = participations.map((p, index) => {
-    const user = users.find((u) => u.id === p.userId);
-    const username = user ? user.username : 'Unknown User';
-    const totalScore = p._sum.score || 0;
-    const totalQuizzes = p._count.id;
+  const lines = transactions.map((t, index) => {
+    const user = users.find((u) => u.id === t.userId);
+    const totalCoins = t._sum.amount || 0;
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `\`#${index + 1}\``;
-    return `${medal} <@${p.userId}> - **${totalScore}** points (from ${totalQuizzes} quizzes)`;
+    return `${medal} <@${t.userId}> - **${totalCoins}** F26 Coins`;
   });
 
-  embed.addFields({ name: 'Top Trivia Competitors', value: lines.join('\n') });
+  embed.addFields({ name: 'Top Weekly Earners', value: lines.join('\n') });
 
   await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleMonthlyLeaderboard(interaction: ChatInputCommandInteraction) {
-  // Calculate start of current month
+  // Calculate start of current month (1st day 12:00 AM IST)
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  istTime.setDate(1);
+  istTime.setHours(0, 0, 0, 0);
+  const diff = now.getTime() - new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).getTime();
+  const startOfMonth = new Date(istTime.getTime() + diff);
 
-  // Group quiz participations by user in the current month
-  const participations = await prisma.quizParticipation.groupBy({
+  // Group transactions by user for this month
+  const transactions = await prisma.coinTransaction.groupBy({
     by: ['userId'],
-    _sum: { score: true },
-    _count: { id: true },
+    _sum: { amount: true },
     where: {
-      startedAt: { gte: startOfMonth }
+      createdAt: { gte: startOfMonth },
+      amount: { gt: 0 }
     },
     orderBy: {
-      _sum: { score: 'desc' }
+      _sum: { amount: 'desc' }
     },
     take: 10
   });
 
-  if (participations.length === 0) {
+  if (transactions.length === 0) {
     await interaction.editReply({
-      content: '📊 **Monthly Quiz Leaderboard**\nNo quiz scores logged for this month yet!'
+      content: '📊 **Monthly F26 Coins Leaderboard**\nNo coins logged for this month yet!'
     });
     return;
   }
 
   // Fetch usernames
-  const userIds = participations.map((p) => p.userId);
+  const userIds = transactions.map((t) => t.userId);
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } }
   });
 
   const embed = new EmbedBuilder()
-    .setTitle('📆 Monthly Accumulated Quiz Leaderboard')
-    .setDescription(`Cumulative quiz scores since the start of ${now.toLocaleString('default', { month: 'long' })}`)
+    .setTitle('📆 Monthly Accumulated F26 Coins Leaderboard')
+    .setDescription(`Cumulative F26 Coins earned since the start of ${now.toLocaleString('default', { month: 'long' })}`)
     .setColor(0x3b82f6)
     .setTimestamp();
 
-  const lines = participations.map((p, index) => {
-    const user = users.find((u) => u.id === p.userId);
-    const totalScore = p._sum.score || 0;
-    const totalQuizzes = p._count.id;
+  const lines = transactions.map((t, index) => {
+    const user = users.find((u) => u.id === t.userId);
+    const totalCoins = t._sum.amount || 0;
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `\`#${index + 1}\``;
-    return `${medal} <@${p.userId}> - **${totalScore}** points (from ${totalQuizzes} quizzes)`;
+    return `${medal} <@${t.userId}> - **${totalCoins}** F26 Coins`;
   });
 
-  embed.addFields({ name: 'Top Trivia Competitors', value: lines.join('\n') });
+  embed.addFields({ name: 'Top Monthly Earners', value: lines.join('\n') });
 
   await interaction.editReply({ embeds: [embed] });
 }
 
-async function handleCoinsLeaderboard(interaction: ChatInputCommandInteraction) {
-  // Fetch top 10 coin owners
+async function handleOverallLeaderboard(interaction: ChatInputCommandInteraction) {
+  // Fetch top 10 users by current total coins
   const topUsers = await prisma.user.findMany({
     orderBy: { coins: 'desc' },
     take: 10
@@ -221,20 +244,50 @@ async function handleCoinsLeaderboard(interaction: ChatInputCommandInteraction) 
 
   if (topUsers.length === 0) {
     await interaction.editReply({
-      content: '📊 **Coins Leaderboard**\nNo users logged in the database yet!'
+      content: '📊 **Overall F26 Coins Leaderboard**\nNo users logged in the database yet!'
     });
     return;
   }
 
   const embed = new EmbedBuilder()
-    .setTitle('💰 Global FIFA W Coins Leaderboard')
-    .setDescription('Top users holding the most FIFA W Coins!')
+    .setTitle('🏆 Overall All-Time F26 Coins Leaderboard')
+    .setDescription('Top users holding the most F26 Coins overall!')
+    .setColor(0x8b5cf6)
+    .setTimestamp();
+
+  const lines = topUsers.map((user, index) => {
+    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `\`#${index + 1}\``;
+    return `${medal} <@${user.id}> - **${user.coins}** F26 Coins`;
+  });
+
+  embed.addFields({ name: 'All-Time Champions', value: lines.join('\n') });
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleCoinsLeaderboard(interaction: ChatInputCommandInteraction) {
+  // Coins leaderboard is identical to overall, showing current global balance
+  const topUsers = await prisma.user.findMany({
+    orderBy: { coins: 'desc' },
+    take: 10
+  });
+
+  if (topUsers.length === 0) {
+    await interaction.editReply({
+      content: '📊 **Global F26 Coins Leaderboard**\nNo users logged in the database yet!'
+    });
+    return;
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle('💰 Global F26 Coins Leaderboard')
+    .setDescription('Top users holding the most F26 Coins!')
     .setColor(0xeab308)
     .setTimestamp();
 
   const lines = topUsers.map((user, index) => {
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `\`#${index + 1}\``;
-    return `${medal} <@${user.id}> - **${user.coins}** FIFA W Coins`;
+    return `${medal} <@${user.id}> - **${user.coins}** F26 Coins`;
   });
 
   embed.addFields({ name: 'Top Wealthy Fans', value: lines.join('\n') });
