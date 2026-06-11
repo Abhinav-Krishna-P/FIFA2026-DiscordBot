@@ -58,18 +58,20 @@ client.on('interactionCreate', async (interaction: Interaction) => {
       return;
     }
 
-    // Ensure user is created in DB (runs in the background to avoid blocking interaction)
-    prisma.user.upsert({
-      where: { id: interaction.user.id },
-      update: { username: interaction.user.username },
-      create: {
-        id: interaction.user.id,
-        username: interaction.user.username,
-        coins: 0
-      }
-    }).catch((err) => {
+    // Ensure user is created in DB before executing command to prevent database race conditions
+    try {
+      await prisma.user.upsert({
+        where: { id: interaction.user.id },
+        update: { username: interaction.user.username },
+        create: {
+          id: interaction.user.id,
+          username: interaction.user.username,
+          coins: 0
+        }
+      });
+    } catch (err) {
       console.error('Failed to upsert user in slash command handler:', err);
-    });
+    }
 
     try {
       await command.execute(interaction, client);

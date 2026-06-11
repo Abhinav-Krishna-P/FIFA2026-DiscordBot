@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { MatchStatsBundle } from './football';
+import { callWithRetry } from '../utils/apiHelper';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -62,7 +63,7 @@ Ensure you return ONLY the JSON array matching this schema.
 `;
 
     console.log('Sending request to Gemini API to generate daily quiz...');
-    const result = await model.generateContent(prompt);
+    const result = await callWithRetry(() => model.generateContent(prompt));
     const responseText = result.response.text().trim();
 
     try {

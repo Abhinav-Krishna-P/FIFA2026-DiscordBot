@@ -29,7 +29,24 @@ export interface QuizSession {
 // Memory cache for active quiz sessions
 export const activeQuizSessions = new Map<string, QuizSession>();
 
+/**
+ * Prunes quiz sessions that have been active for more than 20 minutes to prevent memory leaks.
+ */
+export function pruneQuizSessions(): void {
+  const now = new Date().getTime();
+  const EXPIRATION_TIME = 20 * 60 * 1000; // 20 minutes
+  
+  for (const [userId, session] of activeQuizSessions.entries()) {
+    if (now - session.startedAt.getTime() > EXPIRATION_TIME) {
+      activeQuizSessions.delete(userId);
+    }
+  }
+}
+
 export async function handleQuizStart(interaction: ChatInputCommandInteraction | ButtonInteraction): Promise<void> {
+  // Run session pruning to clean up stale sessions
+  pruneQuizSessions();
+
   const userId = interaction.user.id;
   const todayStr = getISTDateString(0);
 
@@ -57,7 +74,7 @@ export async function handleQuizStart(interaction: ChatInputCommandInteraction |
 
   if (!quiz) {
     await interaction.editReply({
-      content: '⚽ Today\'s quiz has not been generated yet. Quizzes are generated daily at 10:20 AM IST. Please try again later!'
+      content: '⚽ Today\'s quiz has not been generated yet. Quizzes are generated daily at 2:30 PM IST. Please try again later!'
     });
     return;
   }

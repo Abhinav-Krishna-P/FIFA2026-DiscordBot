@@ -46,48 +46,70 @@ export const profileCommand: Command = {
         });
       }
 
-      // Calculate stats
-      const todayStr = getISTDateString(0);
-
-      // 1. Daily Quiz Score
-      const todayQuiz = await prisma.quiz.findUnique({
-        where: { date: todayStr }
-      });
-      let dailyScoreStr = 'Not taken yet';
-      if (todayQuiz) {
-        const todayPart = dbUser.quizParticipations.find(p => p.quizId === todayQuiz.id);
-        if (todayPart) {
-          const timeSec = (todayPart.durationMs / 1000).toFixed(1);
-          dailyScoreStr = `**${todayPart.score}/10** in ${timeSec}s`;
-        }
-      }
-
-      // 2. Weekly Quiz Score (since Monday)
+      // Calculate date ranges in Asia/Kolkata (IST) timezone for transaction checks
       const now = new Date();
-      const startOfWeek = new Date(now);
-      const day = startOfWeek.getDay();
-      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-      startOfWeek.setDate(diff);
-      startOfWeek.setHours(0, 0, 0, 0);
+      const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const diff = now.getTime() - istTime.getTime();
 
-      const weeklyScore = dbUser.quizParticipations
-        .filter(p => p.startedAt >= startOfWeek)
-        .reduce((sum, p) => sum + p.score, 0);
+      // Today start (IST 12:00 AM)
+      const todayIST = new Date(istTime);
+      todayIST.setHours(0, 0, 0, 0);
+      const startOfToday = new Date(todayIST.getTime() + diff);
 
-      // 3. Monthly Quiz Score (since 1st of month)
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      const monthlyScore = dbUser.quizParticipations
-        .filter(p => p.startedAt >= startOfMonth)
-        .reduce((sum, p) => sum + p.score, 0);
+      // Week start (Monday IST 12:00 AM)
+      const weekIST = new Date(istTime);
+      const day = weekIST.getDay();
+      const diffDays = weekIST.getDate() - day + (day === 0 ? -6 : 1);
+      weekIST.setDate(diffDays);
+      weekIST.setHours(0, 0, 0, 0);
+      const startOfWeek = new Date(weekIST.getTime() + diff);
 
-      // 4. Fastest Quiz Completion
+      // Month start (1st day IST 12:00 AM)
+      const monthIST = new Date(istTime);
+      monthIST.setDate(1);
+      monthIST.setHours(0, 0, 0, 0);
+      const startOfMonth = new Date(monthIST.getTime() + diff);
+
+      // Fetch sum of earned coins (positive transactions) from CoinTransaction table
+      const dailyTx = await prisma.coinTransaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          userId: targetUser.id,
+          createdAt: { gte: startOfToday },
+          amount: { gt: 0 }
+        }
+      });
+
+      const weeklyTx = await prisma.coinTransaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          userId: targetUser.id,
+          createdAt: { gte: startOfWeek },
+          amount: { gt: 0 }
+        }
+      });
+
+      const monthlyTx = await prisma.coinTransaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          userId: targetUser.id,
+          createdAt: { gte: startOfMonth },
+          amount: { gt: 0 }
+        }
+      });
+
+      const dailyCoins = dailyTx._sum.amount || 0;
+      const weeklyCoins = weeklyTx._sum.amount || 0;
+      const monthlyCoins = monthlyTx._sum.amount || 0;
+
+      // Calculate fastest completion time without displaying quiz score
       let fastestTimeStr = 'N/A';
       if (dbUser.quizParticipations.length > 0) {
         const fastestPart = [...dbUser.quizParticipations].sort((a, b) => a.durationMs - b.durationMs)[0];
-        fastestTimeStr = `**${(fastestPart.durationMs / 1000).toFixed(1)}s** (Score: ${fastestPart.score}/10)`;
+        fastestTimeStr = `**${(fastestPart.durationMs / 1000).toFixed(1)}s**`;
       }
 
-      // 5. Achievements
+      // Format achievements list
       let achievementsStr = 'No achievements unlocked yet.';
       if (dbUser.achievements.length > 0) {
         achievementsStr = dbUser.achievements
@@ -106,10 +128,10 @@ export const profileCommand: Command = {
           { name: '📝 Quizzes Completed', value: `**${dbUser.totalQuizParticipation}** quizzes`, inline: true },
 
           {
-            name: '📊 Quiz Scores', value:
-              `• **Today's Quiz:** ${dailyScoreStr}\n` +
-              `• **This Week's Total:** **${weeklyScore}** points\n` +
-              `• **This Month's Total:** **${monthlyScore}** points`,
+            name: '📈 F26 Coins Earned', value:
+              `• **Today:** **+${dailyCoins}** Coins\n` +
+              `• **This Week:** **+${weeklyCoins}** Coins\n` +
+              `• **This Month:** **+${monthlyCoins}** Coins`,
             inline: false
           },
           { name: '⚡ Personal Records', value: `• **Fastest Quiz Time:** ${fastestTimeStr}`, inline: false },

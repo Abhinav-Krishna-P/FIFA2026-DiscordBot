@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callWithRetry } from '../utils/apiHelper';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -106,7 +107,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
 `;
 
     console.log(`[AI Football] Fetching fixtures for ${date} from Gemini...`);
-    const result = await model.generateContent(prompt);
+    const result = await callWithRetry(() => model.generateContent(prompt));
     const text = result.response.text().trim();
 
     try {
@@ -153,7 +154,7 @@ Ensure you return ONLY the JSON object matching this schema. No markdown wrappin
 `;
 
     console.log(`[AI Football] Fetching match result for ${homeTeam} vs ${awayTeam} on ${date} from Gemini...`);
-    const result = await model.generateContent(prompt);
+    const result = await callWithRetry(() => model.generateContent(prompt));
     const text = result.response.text().trim();
 
     try {
@@ -227,7 +228,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
 `;
 
     console.log(`[AI Football] Fetching matches with stats for ${date} from Gemini...`);
-    const result = await model.generateContent(prompt);
+    const result = await callWithRetry(() => model.generateContent(prompt));
     const text = result.response.text().trim();
 
     try {
@@ -282,7 +283,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
 `;
 
     console.log('[AI Football] Fetching participating teams from Gemini...');
-    const result = await model.generateContent(prompt);
+    const result = await callWithRetry(() => model.generateContent(prompt));
     const text = result.response.text().trim();
 
     try {
@@ -327,7 +328,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
 `;
 
     console.log('[AI Football] Fetching complete World Cup schedule from Gemini...');
-    const result = await model.generateContent(prompt);
+    const result = await callWithRetry(() => model.generateContent(prompt));
     const text = result.response.text().trim();
 
     try {

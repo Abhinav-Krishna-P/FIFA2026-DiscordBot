@@ -4,6 +4,7 @@ import { prisma } from './db';
 import { FootballService } from './football';
 import { AIService } from './ai';
 import { getISTDateString } from '../utils/date';
+import { activeQuizSessions } from '../commands/quiz';
 
 
 export class SchedulerService {
@@ -351,6 +352,10 @@ export class SchedulerService {
    * Job 4: Finds top scores for today's quiz, awards daily winners, resets daily leaderboards, and posts podium.
    */
   public async calculateQuizWinnersJob(): Promise<void> {
+    // Daily quiz is closing: clear all active quiz sessions to free memory and reset state
+    activeQuizSessions.clear();
+    console.log("[Quiz Winners] Cleared all active quiz sessions for the day.");
+
     const todayStr = getISTDateString(0);
     console.log(`[Quiz Winners] Calculating podium for today's quiz: ${todayStr}...`);
 
