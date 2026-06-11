@@ -15,8 +15,6 @@ COPY package*.json ./
 COPY prisma ./prisma/
 RUN npm ci --omit=dev
 COPY --from=builder /usr/src/app/dist ./dist
-RUN npx prisma migrate deploy
-RUN npx prisma db push
 RUN npx prisma generate
 
 ENV NODE_ENV=production
