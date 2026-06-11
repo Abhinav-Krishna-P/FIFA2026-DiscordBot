@@ -1,4 +1,5 @@
-<div align="center">  
+<div align="center">
+  
   # 🏆 FIFA World Cup 2026 Discord Bot 🏆
 
   [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
