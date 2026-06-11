@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  fifa-bot:
+    build: .
+    container_name: fifa-2026-bot
+    restart: always
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
