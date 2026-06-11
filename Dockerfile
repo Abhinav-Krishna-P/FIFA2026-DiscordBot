@@ -1,5 +1,6 @@
 # Build Stage
 FROM node:20-alpine AS builder
+RUN apk add --no-cache openssl
 WORKDIR /usr/src/app
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -10,6 +11,7 @@ RUN npx prisma generate
 
 # Production Runner Stage
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /usr/src/app
 COPY package*.json ./
 COPY prisma ./prisma/
