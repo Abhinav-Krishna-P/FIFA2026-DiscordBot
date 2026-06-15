@@ -20,7 +20,7 @@ export class SchedulerService {
   public start(): void {
     console.log('Initializing scheduler jobs...');
 
-    // 1. Generate daily quiz at 2:30 AM IST
+    // 1. Generate daily quiz at 2:00 AM IST
     cron.schedule('00 14 * * *', async () => {
       console.log('[Scheduler] Running Daily Quiz Generation job...');
       try {
@@ -33,7 +33,7 @@ export class SchedulerService {
     });
 
     // 2. Generate today's match prediction polls at 11:00 AM IST
-    cron.schedule('02 14 * * *', async () => {
+    cron.schedule('00 11 * * *', async () => {
       console.log('[Scheduler] Running Match Prediction Polls Generation job...');
       try {
         await this.generatePollsJob();
@@ -45,7 +45,7 @@ export class SchedulerService {
     });
 
     // 3. Settle yesterday's polls and distribute rewards at 10:00 AM IST
-    cron.schedule('24 14 * * *', async () => {
+    cron.schedule('00 10 * * *', async () => {
       console.log('[Scheduler] Running Polls Settlement job...');
       try {
         await this.settlePollsJob();
@@ -56,8 +56,8 @@ export class SchedulerService {
       timezone: 'Asia/Kolkata'
     });
 
-    // 4. Calculate daily quiz winners and distribute rewards at 6:00 PM IST
-    cron.schedule('20 14 * * *', async () => {
+    // 4. Calculate daily quiz winners and distribute rewards at 5:30 PM IST
+    cron.schedule('00 18 * * *', async () => {
       console.log('[Scheduler] Running Daily Quiz Winners Calculation job...');
       try {
         await this.calculateQuizWinnersJob();
