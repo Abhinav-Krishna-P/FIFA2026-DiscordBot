@@ -21,7 +21,7 @@ export class SchedulerService {
     console.log('Initializing scheduler jobs...');
 
     // 1. Generate daily quiz at 2:30 AM IST
-    cron.schedule('30 14 * * *', async () => {
+    cron.schedule('00 14 * * *', async () => {
       console.log('[Scheduler] Running Daily Quiz Generation job...');
       try {
         await this.generateQuizJob();
@@ -33,7 +33,7 @@ export class SchedulerService {
     });
 
     // 2. Generate today's match prediction polls at 11:00 AM IST
-    cron.schedule('00 11 * * *', async () => {
+    cron.schedule('02 14 * * *', async () => {
       console.log('[Scheduler] Running Match Prediction Polls Generation job...');
       try {
         await this.generatePollsJob();
@@ -45,7 +45,7 @@ export class SchedulerService {
     });
 
     // 3. Settle yesterday's polls and distribute rewards at 10:00 AM IST
-    cron.schedule('0 16 * * *', async () => {
+    cron.schedule('24 14 * * *', async () => {
       console.log('[Scheduler] Running Polls Settlement job...');
       try {
         await this.settlePollsJob();
@@ -57,7 +57,7 @@ export class SchedulerService {
     });
 
     // 4. Calculate daily quiz winners and distribute rewards at 6:00 PM IST
-    cron.schedule('0 18 * * *', async () => {
+    cron.schedule('20 14 * * *', async () => {
       console.log('[Scheduler] Running Daily Quiz Winners Calculation job...');
       try {
         await this.calculateQuizWinnersJob();
@@ -244,15 +244,37 @@ export class SchedulerService {
     const yesterdayStr = getISTDateString(-1);
     console.log(`[Settle Job] Settling prediction polls for date ${yesterdayStr}...`);
 
-    // Fetch active polls in the database
+    // Calculate the previous IST match window:
+    // Yesterday 10:00 AM IST (04:30 UTC) → Today 9:30 AM IST (04:00 UTC)
+    const now = new Date();
+    const todayStr = getISTDateString(0);
+    const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+    const [yYear, yMonth, yDay] = yesterdayStr.split('-').map(Number);
+
+    // Window start: yesterday 10:00 AM IST = yesterday 04:30 UTC
+    const windowStart = new Date(Date.UTC(yYear, yMonth - 1, yDay, 4, 30, 0));
+    // Window end: today 9:30 AM IST = today 04:00 UTC
+    const windowEnd = new Date(Date.UTC(tYear, tMonth - 1, tDay, 4, 0, 0));
+
+    console.log(`[Settle Job] Looking for polls with kickoff between ${windowStart.toISOString()} and ${windowEnd.toISOString()}`);
+
+    // Fetch active polls whose kickoffTime falls within yesterday's IST match window
     const activePolls = await prisma.matchPredictionPoll.findMany({
-      where: { status: 'active' }
+      where: {
+        status: 'active',
+        kickoffTime: {
+          gte: windowStart,
+          lt: windowEnd
+        }
+      }
     });
 
     if (activePolls.length === 0) {
-      console.log('[Settle Job] No active prediction polls to settle.');
+      console.log('[Settle Job] No active prediction polls from yesterday to settle.');
       return;
     }
+
+    console.log(`[Settle Job] Found ${activePolls.length} active polls from yesterday to settle.`);
 
     for (const poll of activePolls) {
       // Format the kickoff time to date string in Asia/Kolkata timezone
@@ -265,7 +287,7 @@ export class SchedulerService {
       const matchDateStr = formatter.format(poll.kickoffTime);
 
       try {
-        console.log(`[Settle Job] Querying Gemini for result of ${poll.homeTeam} vs ${poll.awayTeam} on ${matchDateStr}...`);
+        console.log(`[Settle Job] Checking result of ${poll.homeTeam} vs ${poll.awayTeam} on ${matchDateStr}...`);
         const result = await FootballService.getFixtureResult(poll.homeTeam, poll.awayTeam, matchDateStr);
 
         // Check if match is finished (Gemini returns status "FT")
@@ -434,7 +456,7 @@ export class SchedulerService {
     // Build plain-text announcement with large headers for 1st and 2nd places
     const winner1 = participations[0];
     const time1 = (winner1.durationMs / 1000).toFixed(1);
-    
+
     let announcement = `🎉✨ **DAILY QUIZ CHAMPIONS** ✨🎉\n\n`;
     announcement += `# 🥇 1st Place: <@${winner1.userId}>\n`;
     announcement += `*   **Quiz Mark:** \`${winner1.score}/10\`\n`;
