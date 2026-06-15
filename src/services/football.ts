@@ -27,32 +27,36 @@ export interface MatchStatsBundle {
 }
 
 export interface FixtureResult {
-  homeGoals: number;
-  awayGoals: number;
-  winner: 'HOME' | 'AWAY' | 'DRAW';
+  homeGoals: number | null;
+  awayGoals: number | null;
+  winner: 'HOME' | 'AWAY' | 'DRAW' | null;
   status: string;
 }
 
 export class FootballService {
-  private static getModel() {
+  private static getModel(withSearch = false) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is not defined in the environment variables.');
     }
     const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({
+    const config: any = {
       model: 'gemini-3.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
       },
-    });
+    };
+    if (withSearch) {
+      config.tools = [{ googleSearch: {} }];
+    }
+    return genAI.getGenerativeModel(config);
   }
 
   /**
    * Queries Gemini to fetch FIFA World Cup 2026 matches scheduled on a specific date (YYYY-MM-DD).
    */
   public static async getFixtures(date: string): Promise<FootballFixture[]> {
-    const model = this.getModel();
+    const model = this.getModel(true);
     const prompt = `
 You are a football data provider.
 Return a list of matches scheduled for the FIFA World Cup 2026 that kickoff in the Indian Standard Time (IST) 24-hour cycle of the date: ${date} (format: YYYY-MM-DD).
@@ -134,20 +138,25 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
    * Queries Gemini to get the final score, goals, and winner of a completed matchup on a specific date.
    */
   public static async getFixtureResult(homeTeam: string, awayTeam: string, date: string): Promise<FixtureResult> {
-    const model = this.getModel();
+    const model = this.getModel(true);
     const prompt = `
 You are a football statistics provider.
-Retrieve the completed final result of the FIFA World Cup 2026 match between "${homeTeam}" and "${awayTeam}".
+Search Google for the completed final result of the FIFA World Cup 2026 match between "${homeTeam}" and "${awayTeam}".
 The date provided is ${date} (format: YYYY-MM-DD) which is in the Indian Standard Time (IST) zone. The match might have been played on ${date} or the previous calendar day local time (since local match time in North America is behind IST).
 
-Provide realistic scores and outcomes based on the match. If the match is not scheduled or has not completed yet, simulate a highly realistic outcome based on team strength and match context.
+IMPORTANT:
+- Use Google Search to find the actual real-world score, winner, and status.
+- If the match has completed, return the actual goals, winner ("HOME" | "AWAY" | "DRAW"), and set status to "FT".
+- If the match is currently live, set status to "LIVE".
+- If the match has not started yet, is postponed, or is not scheduled, set status to "NS", homeGoals/awayGoals to null, and winner to null.
+- CRITICAL: If you are unable to find or verify the correct real-world match score from Google Search for the FIFA World Cup 2026, you MUST set status to "NS", homeGoals/awayGoals to null, and winner to null. Do NOT return "FT" or simulate/hallucinate any fake result under any circumstances.
 
 Output must be a JSON object conforming to this schema:
 {
-  "homeGoals": number (goals scored by home team),
-  "awayGoals": number (goals scored by away team),
-  "winner": "HOME" | "AWAY" | "DRAW",
-  "status": "FT"
+  "homeGoals": number | null,
+  "awayGoals": number | null,
+  "winner": "HOME" | "AWAY" | "DRAW" | null,
+  "status": "FT" | "LIVE" | "NS"
 }
 
 Ensure you return ONLY the JSON object matching this schema. No markdown wrapping.
@@ -160,9 +169,9 @@ Ensure you return ONLY the JSON object matching this schema. No markdown wrappin
     try {
       const item = JSON.parse(text);
       return {
-        homeGoals: Number(item.homeGoals),
-        awayGoals: Number(item.awayGoals),
-        winner: item.winner,
+        homeGoals: item.homeGoals !== null && item.homeGoals !== undefined ? Number(item.homeGoals) : null,
+        awayGoals: item.awayGoals !== null && item.awayGoals !== undefined ? Number(item.awayGoals) : null,
+        winner: item.winner || null,
         status: String(item.status || 'FT'),
       };
     } catch (err) {
@@ -171,14 +180,11 @@ Ensure you return ONLY the JSON object matching this schema. No markdown wrappin
     }
   }
 
-  /**
-   * Queries Gemini to retrieve completed matches and team statistics (possession, shots, fouls) for a date.
-   */
   public static async getMatchesWithStats(date: string): Promise<MatchStatsBundle[]> {
-    const model = this.getModel();
+    const model = this.getModel(true);
     const prompt = `
 You are a football statistics provider.
-Return all completed matches and their detailed team statistics (ball possession, total shots, fouls) for the FIFA World Cup 2026 matches that kicked off in the Indian Standard Time (IST) 24-hour cycle of the date: ${date} (format: YYYY-MM-DD).
+Search Google for and return all completed matches and their detailed team statistics (ball possession, total shots, fouls) for the FIFA World Cup 2026 matches that kicked off in the Indian Standard Time (IST) 24-hour cycle of the date: ${date} (format: YYYY-MM-DD).
 Specifically, return matches that kicked off between ${date}T04:00:00Z and the next day at 04:00:00Z in UTC.
 
 Here is the official Group Stage Group assignments for the FIFA World Cup 2026 (draw completed Dec 5, 2025):
@@ -196,10 +202,11 @@ Here is the official Group Stage Group assignments for the FIFA World Cup 2026 (
 - Group L: England, Croatia, Ghana, Panama
 
 IMPORTANT:
-- Use the actual/official FIFA World Cup 2026 match schedule and matchups.
+- Use Google Search to find the actual real-world completed match matchups, final scores, and statistics (possession, shots, fouls) for the World Cup 2026 on ${date}.
 - You MUST NOT return any placeholder team names like "Group A Opponent", "Group B Opponent", "Play-off Winner", "TBD", "A2", "B1", etc. All match team names MUST be resolved to the actual countries listed in the groups above.
 - If no matches were played/completed in this window, return an empty array [].
-- For team statistics, provide realistic values for:
+- CRITICAL: If you are unable to find or verify the correct real-world completed matches and their stats for the FIFA World Cup 2026 on this date, you MUST return an empty array []. Under no circumstances should you generate or simulate fake match scores or stats if they are not confirmed in the real world.
+- For team statistics, search for actual/realistic values for:
   - Ball Possession (e.g. "55%")
   - Total Shots (integer)
   - Fouls (integer)
