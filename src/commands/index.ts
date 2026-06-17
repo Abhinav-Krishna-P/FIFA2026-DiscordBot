@@ -26,6 +26,7 @@ import { forceQuizCommand } from './admin/forceQuiz';
 import { forcePollsCommand } from './admin/forcePolls';
 import { settlePollsCommand } from './admin/settlePolls';
 import { adjustCoinsCommand } from './admin/adjustCoins';
+import { onboardingCommand } from './admin/onboarding';
 
 export const commands: Command[] = [
   quizCommand,
@@ -36,5 +37,7 @@ export const commands: Command[] = [
   forceQuizCommand,
   forcePollsCommand,
   settlePollsCommand,
-  adjustCoinsCommand
+  adjustCoinsCommand,
+  onboardingCommand
 ];
+
