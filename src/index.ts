@@ -297,86 +297,87 @@ client.on('interactionCreate', async (interaction: Interaction) => {
           const completedAt = new Date();
           const durationMs = completedAt.getTime() - session.startedAt.getTime();
           const score = session.score;
-
-          // Ensure user is created in database
-          await prisma.user.upsert({
-            where: { id: userId },
-            update: { username: interaction.user.username },
-            create: {
-              id: userId,
-              username: interaction.user.username,
-              coins: 0
-            }
-          });
-
-          // Save participation to DB
-          await prisma.quizParticipation.create({
-            data: {
-              userId,
-              quizId: session.quizId,
-              score,
-              startedAt: session.startedAt,
-              completedAt,
-              durationMs,
-              answers: session.answers as any
-            }
-          });
-
-          // Update user statistics and award participation coin (+1)
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              coins: { increment: 1 },
-              totalQuizParticipation: { increment: 1 }
-            }
-          });
-
-          // Log transaction
-          await prisma.coinTransaction.create({
-            data: {
-              userId,
-              amount: 1,
-              reason: 'quiz_participation'
-            }
-          });
-
-          // Check if they unlocked any achievements
           const achievementsToUnlock: { name: string; description: string }[] = [];
 
-          // 1. Check for Perfect Trivia Score (10/10)
-          if (score === 10) {
-            const hasPerfectScoreAchievement = await prisma.achievement.findFirst({
-              where: { userId, name: 'Perfect Trivia' }
-            });
-            if (!hasPerfectScoreAchievement) {
-              achievementsToUnlock.push({
-                name: 'Perfect Trivia',
-                description: 'Answered all 10 questions correctly in a daily quiz!'
-              });
-            }
-          }
-
-          // 2. Check for first quiz participation
-          const userParticipationsCount = await prisma.quizParticipation.count({
-            where: { userId }
-          });
-          if (userParticipationsCount === 1) {
-            achievementsToUnlock.push({
-              name: 'First Kick',
-              description: 'Completed your very first daily football quiz!'
-            });
-          }
-
-          // 3. Unlock achievements in DB
-          for (const achievement of achievementsToUnlock) {
-            await prisma.achievement.create({
-              data: {
-                userId,
-                name: achievement.name,
-                description: achievement.description
+          // Wrap all database operations in an interactive transaction to guarantee consistency and atomic safety under concurrent load
+          await prisma.$transaction(async (tx) => {
+            // Ensure user exists in database
+            await tx.user.upsert({
+              where: { id: userId },
+              update: { username: interaction.user.username },
+              create: {
+                id: userId,
+                username: interaction.user.username,
+                coins: 0
               }
             });
-          }
+
+            // Save participation to DB
+            await tx.quizParticipation.create({
+              data: {
+                userId,
+                quizId: session.quizId,
+                score,
+                startedAt: session.startedAt,
+                completedAt,
+                durationMs,
+                answers: session.answers as any
+              }
+            });
+
+            // Update user statistics and award participation coin (+1)
+            await tx.user.update({
+              where: { id: userId },
+              data: {
+                coins: { increment: 1 },
+                totalQuizParticipation: { increment: 1 }
+              }
+            });
+
+            // Log transaction
+            await tx.coinTransaction.create({
+              data: {
+                userId,
+                amount: 1,
+                reason: 'quiz_participation'
+              }
+            });
+
+            // 1. Check for Perfect Trivia Score (10/10)
+            if (score === 10) {
+              const hasPerfectScoreAchievement = await tx.achievement.findFirst({
+                where: { userId, name: 'Perfect Trivia' }
+              });
+              if (!hasPerfectScoreAchievement) {
+                achievementsToUnlock.push({
+                  name: 'Perfect Trivia',
+                  description: 'Answered all 10 questions correctly in a daily quiz!'
+                });
+              }
+            }
+
+            // 2. Check for first quiz participation (will be 1 because of the create above in the same transaction)
+            const userParticipationsCount = await tx.quizParticipation.count({
+              where: { userId }
+            });
+            if (userParticipationsCount === 1) {
+              achievementsToUnlock.push({
+                name: 'First Kick',
+                description: 'Completed your very first daily football quiz!'
+              });
+            }
+
+            // 3. Unlock achievements in DB
+            for (const achievement of achievementsToUnlock) {
+              await tx.achievement.create({
+                data: {
+                  userId,
+                  name: achievement.name,
+                  description: achievement.description
+                }
+              });
+            }
+          });
 
           // Build completion embed
           const durationSec = (durationMs / 1000).toFixed(1);
