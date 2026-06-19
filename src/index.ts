@@ -13,6 +13,9 @@ import { SchedulerService } from './services/scheduler';
 
 dotenv.config();
 
+// Memory cache to prevent concurrent prediction button double-taps
+const activePredictionSubmissions = new Set<string>();
+
 const token = process.env.DISCORD_TOKEN;
 
 if (!token) {
@@ -97,13 +100,26 @@ client.on('interactionCreate', async (interaction: Interaction) => {
 
       const matchId = parts[1];
       const predictionChoice = parts[2]; // 'HOME', 'DRAW', or 'AWAY'
+      const pollId = interaction.message.id;
+      const userId = interaction.user.id;
+      const submissionKey = `${userId}_${pollId}`;
 
-      await interaction.deferReply({ ephemeral: true });
+      // In-memory double-tap prevention (stops duplicate clicks within milliseconds)
+      if (activePredictionSubmissions.has(submissionKey)) {
+        await interaction.reply({
+          content: '⚠️ You are clicking too fast! Your prediction is already being processed.',
+          ephemeral: true
+        });
+        return;
+      }
+      activePredictionSubmissions.add(submissionKey);
 
       try {
+        await interaction.deferReply({ ephemeral: true });
+
         // Find matching poll in DB using message ID
         const poll = await prisma.matchPredictionPoll.findUnique({
-          where: { id: interaction.message.id }
+          where: { id: pollId }
         });
 
         if (!poll) {
@@ -132,10 +148,10 @@ client.on('interactionCreate', async (interaction: Interaction) => {
 
         // Ensure user exists in database
         await prisma.user.upsert({
-          where: { id: interaction.user.id },
+          where: { id: userId },
           update: { username: interaction.user.username },
           create: {
-            id: interaction.user.id,
+            id: userId,
             username: interaction.user.username,
             coins: 0
           }
@@ -146,7 +162,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
           where: {
             pollId_userId: {
               pollId: poll.id,
-              userId: interaction.user.id
+              userId: userId
             }
           }
         });
@@ -165,7 +181,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         await prisma.prediction.create({
           data: {
             pollId: poll.id,
-            userId: interaction.user.id,
+            userId: userId,
             predictedWinner: predictionChoice
           }
         });
@@ -178,10 +194,35 @@ client.on('interactionCreate', async (interaction: Interaction) => {
           content: `✅ Your prediction for **${choiceText}** has been successfully recorded! Good luck!`
         });
       } catch (err) {
+        // Intercept unique constraint violation (P2002) in case DB race condition occurs
+        if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({
+              content: '⚠️ You have already submitted a prediction for this match!'
+            });
+          } else {
+            await interaction.reply({
+              content: '⚠️ You have already submitted a prediction for this match!',
+              ephemeral: true
+            });
+          }
+          return;
+        }
+
         console.error('Error recording prediction:', err);
-        await interaction.editReply({
-          content: '❌ Failed to submit prediction due to a database error.'
-        });
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({
+            content: '❌ Failed to submit prediction due to a database error.'
+          });
+        } else {
+          await interaction.reply({
+            content: '❌ Failed to submit prediction due to a database error.',
+            ephemeral: true
+          });
+        }
+      } finally {
+        // Always clean up lock to allow future actions (though predictions are one-time per match, this prevents blocking in case of mistakes)
+        activePredictionSubmissions.delete(submissionKey);
       }
     }
 
