@@ -18,7 +18,7 @@ export interface QuizSession {
     question: string;
     options: string[];
     correctAnswerIndex: number;
-    explanation: string;
+    explanation?: string;
   }[];
   currentIndex: number;
   score: number;

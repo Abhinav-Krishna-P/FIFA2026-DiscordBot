@@ -8,7 +8,7 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswerIndex: number;
-  explanation: string;
+  explanation?: string;
 }
 
 export class AIService {
@@ -23,6 +23,31 @@ export class AIService {
       model: 'gemini-3.5-flash',
       generationConfig: {
         responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'array',
+          description: 'A list of exactly 10 multiple-choice trivia questions',
+          items: {
+            type: 'object',
+            properties: {
+              question: {
+                type: 'string',
+                description: 'The trivia question text'
+              },
+              options: {
+                type: 'array',
+                items: {
+                  type: 'string'
+                },
+                description: 'Exactly 4 multiple-choice options'
+              },
+              correctAnswerIndex: {
+                type: 'integer',
+                description: 'The 0-indexed index of the correct option (0, 1, 2, or 3)'
+              }
+            },
+            required: ['question', 'options', 'correctAnswerIndex']
+          }
+        } as any
       },
     });
   }
@@ -47,15 +72,13 @@ Requirements:
 1. Questions must be easy to understand and suitable for casual football fans. Avoid overly technical metrics (e.g. expected goals xG, complex defensive structures). Focus on simple stats like goals, winners, possession, shots, team matchups, etc.
 2. Each question must have exactly 4 options.
 3. Provide a 0-indexed 'correctAnswerIndex' representing the correct option (0, 1, 2, or 3).
-4. Provide a brief, engaging, and friendly explanation of the answer.
-5. If there are no matches yesterday or not enough matches to make 10 distinct, simple questions, you MUST fill the remaining questions with fun, general, historic FIFA World Cup trivia questions (e.g., historical winners, famous goals, legendary players) to make exactly 10 questions.
-6. The response must be a single JSON array of objects with the following format:
+4. If there are no matches yesterday or not enough matches to make 10 distinct, simple questions, you MUST fill the remaining questions with fun, general, historic FIFA World Cup trivia questions (e.g., historical winners, famous goals, legendary players) to make exactly 10 questions.
+5. The response must be a single JSON array of objects with the following format:
 [
   {
     "question": "Which team won the match between Germany and France?",
     "options": ["Germany", "France", "Draw", "Match was postponed"],
-    "correctAnswerIndex": 0,
-    "explanation": "Germany won the match 2-1 against France yesterday with a late winning goal."
+    "correctAnswerIndex": 0
   }
 ]
 
@@ -74,7 +97,7 @@ Ensure you return ONLY the JSON array matching this schema.
 
       // Perform a quick validation of the question structure
       for (const q of questions) {
-        if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || typeof q.correctAnswerIndex !== 'number' || !q.explanation) {
+        if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 || typeof q.correctAnswerIndex !== 'number') {
           throw new Error(`Invalid question structure in response: ${JSON.stringify(q)}`);
         }
       }
