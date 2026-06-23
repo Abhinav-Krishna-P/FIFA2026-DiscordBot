@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { callWithRetry } from '../utils/apiHelper';
+import { callWithRetry, cleanJSONString } from '../utils/apiHelper';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -466,7 +466,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
     const text = result.response.text().trim();
 
     try {
-      const response = JSON.parse(text);
+      const response = JSON.parse(cleanJSONString(text));
       if (!Array.isArray(response)) return [];
 
       return response.map((item: any) => ({
@@ -515,7 +515,7 @@ Ensure you return ONLY the JSON object matching this schema. No markdown wrappin
     const text = result.response.text().trim();
 
     try {
-      const item = JSON.parse(text);
+      const item = JSON.parse(cleanJSONString(text));
       return {
         homeGoals: item.homeGoals !== null && item.homeGoals !== undefined ? Number(item.homeGoals) : null,
         awayGoals: item.awayGoals !== null && item.awayGoals !== undefined ? Number(item.awayGoals) : null,
@@ -568,7 +568,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
     const text = result.response.text().trim();
 
     try {
-      const response = JSON.parse(text);
+      const response = JSON.parse(cleanJSONString(text));
       if (!Array.isArray(response)) return [];
 
       return response.map((item: any) => ({
@@ -625,7 +625,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
     const text = result.response.text().trim();
 
     try {
-      const response = JSON.parse(text);
+      const response = JSON.parse(cleanJSONString(text));
       return Array.isArray(response) ? response : [];
     } catch (err) {
       console.error('[AI Football] Failed to parse teams JSON:', text);
@@ -670,7 +670,7 @@ Ensure you return ONLY the JSON array matching this schema. No markdown wrapping
     const text = result.response.text().trim();
 
     try {
-      const response = JSON.parse(text);
+      const response = JSON.parse(cleanJSONString(text));
       return Array.isArray(response) ? response : [];
     } catch (err) {
       console.error('[AI Football] Failed to parse season fixtures JSON:', text);
