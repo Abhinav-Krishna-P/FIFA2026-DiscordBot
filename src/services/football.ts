@@ -62,7 +62,7 @@ interface APIGame {
 
 // ===== API Cache =====
 
-const API_BASE_URL = 'https://worldcup26.ir/';
+const API_BASE_URL = process.env.WORLD_CUP_API_BASE_URL || 'http://161.35.49.70:3050';
 const API_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 let cachedGames: APIGame[] | null = null;
