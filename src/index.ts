@@ -99,7 +99,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
       if (parts.length < 3) return;
 
       const matchId = parts[1];
-      const predictionChoice = parts[2]; // 'HOME', 'DRAW', or 'AWAY'
+      const predictionChoice = parts[2]; // 'HOME' or 'AWAY'
       const pollId = interaction.message.id;
       const userId = interaction.user.id;
       const submissionKey = `${userId}_${pollId}`;
@@ -168,9 +168,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         });
 
         if (existingPrediction) {
-          const predictedTeamName = existingPrediction.predictedWinner === 'DRAW'
-            ? 'Draw'
-            : (existingPrediction.predictedWinner === 'HOME' ? poll.homeTeam : poll.awayTeam);
+          const predictedTeamName = existingPrediction.predictedWinner === 'HOME' ? poll.homeTeam : poll.awayTeam;
           await interaction.editReply({
             content: `❌ You have already submitted a prediction for this match! Predicted: **${predictedTeamName}**. Predictions cannot be changed.`
           });
@@ -186,9 +184,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
           }
         });
 
-        const choiceText = predictionChoice === 'DRAW'
-          ? 'Draw'
-          : (predictionChoice === 'HOME' ? poll.homeTeam : poll.awayTeam);
+        const choiceText = predictionChoice === 'HOME' ? poll.homeTeam : poll.awayTeam;
 
         await interaction.editReply({
           content: `✅ Your prediction for **${choiceText}** has been successfully recorded! Good luck!`

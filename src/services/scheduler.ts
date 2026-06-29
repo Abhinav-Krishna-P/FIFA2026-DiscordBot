@@ -202,17 +202,12 @@ export class SchedulerService {
         .setLabel(fixture.homeTeam)
         .setStyle(ButtonStyle.Primary);
 
-      const btnDraw = new ButtonBuilder()
-        .setCustomId(`predict_${fixture.id}_DRAW`)
-        .setLabel('Draw')
-        .setStyle(ButtonStyle.Secondary);
-
       const btnAway = new ButtonBuilder()
         .setCustomId(`predict_${fixture.id}_AWAY`)
         .setLabel(fixture.awayTeam)
         .setStyle(ButtonStyle.Primary);
 
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(btnHome, btnDraw, btnAway);
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(btnHome, btnAway);
 
       // Post to Discord
       const message = await channel.send({
@@ -350,7 +345,7 @@ export class SchedulerService {
         // Post result to Discord channel
         const channel = await this.client.channels.fetch(poll.channelId);
         if (channel && channel instanceof TextChannel) {
-          const resultText = winner === 'DRAW' ? 'Draw' : (winner === 'HOME' ? poll.homeTeam : poll.awayTeam);
+          const resultText = winner === 'HOME' ? poll.homeTeam : poll.awayTeam;
 
           let announcement = `🔔 **Prediction Poll Settle:** **${poll.homeTeam} vs ${poll.awayTeam}**\n` +
             `• Final Score: ${result.homeGoals} - ${result.awayGoals}\n` +

@@ -59,7 +59,7 @@ export const pollsCommand: Command = {
         let predictionText = '*Not predicted yet*';
         if (userPred) {
           statusEmoji = '✅';
-          predictionText = `Predicted: **${userPred.predictedWinner === 'DRAW' ? 'Draw' : (userPred.predictedWinner === 'HOME' ? poll.homeTeam : poll.awayTeam)}**`;
+          predictionText = `Predicted: **${userPred.predictedWinner === 'HOME' ? poll.homeTeam : poll.awayTeam}**`;
         }
 
         const kickoffTimeFormatted = `<t:${Math.floor(poll.kickoffTime.getTime() / 1000)}:F>`;

@@ -46,7 +46,7 @@ export const onboardingCommand: Command = {
             name: '🔮 2. Match Prediction Polls',
             value:
               `• **Timing:** Polls for the day's matches are posted at **11:00 AM IST** daily. Settle and reward distribution happens at **10:00 AM IST** the next day.\n` +
-              `• **Gameplay:** Select your predicted winner (Home Win, Draw, or Away Win) via the buttons before the match kicks off. Once submitted, predictions cannot be modified.\n` +
+              `• **Gameplay:** Select the team you predict will win (Home Win or Away Win) via the buttons before the match kicks off. Once submitted, predictions cannot be modified.\n` +
               `• **Rewards:** Earn **+5 Coins** for each correct prediction! (No loss for incorrect ones).`
           },
           {
