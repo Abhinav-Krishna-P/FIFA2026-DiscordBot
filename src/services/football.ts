@@ -58,6 +58,7 @@ interface APIGame {
   away_team_name_en?: string;
   home_team_label?: string;
   away_team_label?: string;
+  winner_team_id?: string | null;
 }
 
 // ===== API Cache =====
@@ -218,6 +219,65 @@ export class FootballService {
     }
   }
 
+  /**
+   * Resolves team names for knockout matches where the API has not populated home_team_name_en/away_team_name_en.
+   * Parses labels like "Winner Match 89" or "Loser Match 101" and looks up the referenced match result.
+   */
+  private static resolveTeamName(
+    teamNameEn: string | undefined,
+    teamLabel: string | undefined,
+    games: APIGame[]
+  ): string {
+    // If the API already has the team name, use it directly
+    if (teamNameEn) return teamNameEn;
+
+    if (!teamLabel) return 'TBD';
+
+    // Parse labels like "Winner Match 89" or "Loser Match 101"
+    const winnerMatch = teamLabel.match(/^Winner Match (\d+)$/i);
+    const loserMatch = teamLabel.match(/^Loser Match (\d+)$/i);
+
+    const refMatchId = winnerMatch ? winnerMatch[1] : loserMatch ? loserMatch[1] : null;
+    if (!refMatchId) return teamLabel || 'TBD';
+
+    const refGame = games.find(g => g.id === refMatchId);
+    if (!refGame || refGame.finished !== 'TRUE') return teamLabel || 'TBD';
+
+    const winnerId = refGame.winner_team_id;
+
+    if (winnerMatch) {
+      // Resolve the winner
+      if (winnerId && winnerId === refGame.home_team_id) {
+        return refGame.home_team_name_en || teamLabel || 'TBD';
+      } else if (winnerId && winnerId === refGame.away_team_id) {
+        return refGame.away_team_name_en || teamLabel || 'TBD';
+      }
+      // Fallback: determine winner by score
+      const homeScore = parseInt(refGame.home_score) || 0;
+      const awayScore = parseInt(refGame.away_score) || 0;
+      if (homeScore > awayScore) return refGame.home_team_name_en || teamLabel || 'TBD';
+      if (awayScore > homeScore) return refGame.away_team_name_en || teamLabel || 'TBD';
+      // If scores are equal (penalties decided by winner_team_id which we already checked)
+      return teamLabel || 'TBD';
+    }
+
+    if (loserMatch) {
+      // Resolve the loser (opposite of winner)
+      if (winnerId && winnerId === refGame.home_team_id) {
+        return refGame.away_team_name_en || teamLabel || 'TBD';
+      } else if (winnerId && winnerId === refGame.away_team_id) {
+        return refGame.home_team_name_en || teamLabel || 'TBD';
+      }
+      const homeScore = parseInt(refGame.home_score) || 0;
+      const awayScore = parseInt(refGame.away_score) || 0;
+      if (homeScore > awayScore) return refGame.away_team_name_en || teamLabel || 'TBD';
+      if (awayScore > homeScore) return refGame.home_team_name_en || teamLabel || 'TBD';
+      return teamLabel || 'TBD';
+    }
+
+    return teamLabel || 'TBD';
+  }
+
   // ===== Public Methods =====
 
   /**
@@ -234,9 +294,6 @@ export class FootballService {
       console.log(`[Football API] Window: ${windowStart.toISOString()} → ${windowEnd.toISOString()}`);
 
       const matchingGames = games.filter(game => {
-        // Skip knockout matches with TBD teams
-        if (!game.home_team_name_en && !game.away_team_name_en) return false;
-
         const { approxUTC } = this.parseLocalDate(game.local_date);
         // Check if match kickoff falls within the IST window
         return approxUTC >= windowStart && approxUTC < windowEnd;
@@ -249,10 +306,13 @@ export class FootballService {
 
       return upcomingGames.map(game => {
         const { approxUTC } = this.parseLocalDate(game.local_date);
+        // Resolve team names for knockout matches (QF/SF/Final)
+        const homeTeam = this.resolveTeamName(game.home_team_name_en, game.home_team_label, games);
+        const awayTeam = this.resolveTeamName(game.away_team_name_en, game.away_team_label, games);
         return {
           id: parseInt(game.id),
-          homeTeam: game.home_team_name_en || game.home_team_label || 'TBD',
-          awayTeam: game.away_team_name_en || game.away_team_label || 'TBD',
+          homeTeam,
+          awayTeam,
           kickoffTime: approxUTC,
           status: 'NS',
           homeGoals: null,
@@ -276,9 +336,10 @@ export class FootballService {
       const games = await this.fetchGamesFromAPI();
 
       // Find matching game by team names (order-independent)
+      // Use resolveTeamName to handle knockout matches with unresolved API names
       const game = games.find(g => {
-        const homeEn = g.home_team_name_en || '';
-        const awayEn = g.away_team_name_en || '';
+        const homeEn = this.resolveTeamName(g.home_team_name_en, g.home_team_label, games);
+        const awayEn = this.resolveTeamName(g.away_team_name_en, g.away_team_label, games);
         return (
           (this.teamsMatch(homeEn, homeTeam) && this.teamsMatch(awayEn, awayTeam)) ||
           (this.teamsMatch(homeEn, awayTeam) && this.teamsMatch(awayEn, homeTeam))
@@ -347,7 +408,6 @@ export class FootballService {
       // Filter finished games within the IST match window
       const matchingGames = games.filter(game => {
         if (game.finished !== 'TRUE') return false;
-        if (!game.home_team_name_en) return false;
 
         const { approxUTC } = this.parseLocalDate(game.local_date);
         return approxUTC >= windowStart && approxUTC < windowEnd;
@@ -355,7 +415,7 @@ export class FootballService {
 
       console.log(`[Football API] Found ${matchingGames.length} finished matches for ${date}.`);
 
-      return this.mapGamesToMatchBundles(matchingGames);
+      return this.mapGamesToMatchBundles(matchingGames, games);
     } catch (err) {
       console.error(`[Football API] API failed for getMatchesWithStats, falling back to Gemini:`, err);
       return this.getMatchesWithStatsFromGemini(date);
@@ -365,12 +425,12 @@ export class FootballService {
   /**
    * Maps API games to MatchStatsBundle format for quiz generation.
    */
-  private static mapGamesToMatchBundles(games: APIGame[]): MatchStatsBundle[] {
+  private static mapGamesToMatchBundles(games: APIGame[], allGames: APIGame[]): MatchStatsBundle[] {
     return games.map(game => {
       const homeScore = parseInt(game.home_score) || 0;
       const awayScore = parseInt(game.away_score) || 0;
-      const homeTeam = game.home_team_name_en || 'Unknown';
-      const awayTeam = game.away_team_name_en || 'Unknown';
+      const homeTeam = this.resolveTeamName(game.home_team_name_en, game.home_team_label, allGames);
+      const awayTeam = this.resolveTeamName(game.away_team_name_en, game.away_team_label, allGames);
       const { approxUTC } = this.parseLocalDate(game.local_date);
 
       let winner: 'HOME' | 'AWAY' | 'DRAW';
