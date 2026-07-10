@@ -36,24 +36,68 @@ export function cleanJSONString(raw: string): string {
     cleaned = match[1].trim();
   }
 
-  // Find first [ or { and last ] or } to extract only the JSON structure
+  // Find first [ or {
   const firstCurly = cleaned.indexOf('{');
   const firstBracket = cleaned.indexOf('[');
 
   let startIdx = -1;
-  let endIdx = -1;
+  let openChar = '';
+  let closeChar = '';
 
   if (firstCurly !== -1 && (firstBracket === -1 || firstCurly < firstBracket)) {
     startIdx = firstCurly;
-    endIdx = cleaned.lastIndexOf('}');
+    openChar = '{';
+    closeChar = '}';
   } else if (firstBracket !== -1 && (firstCurly === -1 || firstBracket < firstCurly)) {
     startIdx = firstBracket;
-    endIdx = cleaned.lastIndexOf(']');
+    openChar = '[';
+    closeChar = ']';
   }
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    cleaned = cleaned.substring(startIdx, endIdx + 1);
+  if (startIdx !== -1) {
+    let count = 0;
+    let inString = false;
+    let escape = false;
+    let foundEnd = false;
+    let endIdx = -1;
+
+    for (let i = startIdx; i < cleaned.length; i++) {
+      const char = cleaned[i];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (char === '\\') {
+          escape = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+      } else {
+        if (char === '"') {
+          inString = true;
+        } else if (char === openChar) {
+          count++;
+        } else if (char === closeChar) {
+          count--;
+          if (count === 0) {
+            endIdx = i;
+            foundEnd = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (foundEnd && endIdx > startIdx) {
+      cleaned = cleaned.substring(startIdx, endIdx + 1);
+    } else {
+      // Fallback to original logic if matching pair not found for some reason
+      const lastCloseIdx = closeChar === '}' ? cleaned.lastIndexOf('}') : cleaned.lastIndexOf(']');
+      if (lastCloseIdx !== -1 && lastCloseIdx > startIdx) {
+        cleaned = cleaned.substring(startIdx, lastCloseIdx + 1);
+      }
+    }
   }
 
   return cleaned;
 }
+
